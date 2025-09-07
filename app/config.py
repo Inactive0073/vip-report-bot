@@ -1,0 +1,34 @@
+from dataclasses import dataclass
+from environs import Env
+
+
+@dataclass
+class TgBot:
+    token: str  # Токен для доступа к телеграм-боту
+
+@dataclass
+class RedisConfig:
+    url: str
+
+
+@dataclass
+class DataBase:
+    dsn: str
+    is_echo: bool
+
+
+@dataclass
+class Config:
+    tg_bot: TgBot
+    db: DataBase
+    redis_url: RedisConfig
+
+
+def load_config(path: str | None = None) -> Config:
+    env = Env()
+    env.read_env(path, override=True)
+    return Config(
+        tg_bot=TgBot(token=env("BOT_TOKEN")),
+        db=DataBase(dsn=env("DSN"), is_echo=env.bool(("IS_ECHO"))),
+        redis_url=RedisConfig(url=env("REDIS_SOURCE"))
+    )

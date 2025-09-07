@@ -1,0 +1,154 @@
+services:
+  app:
+    container_name: coffee_app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - nats
+      - postgres
+    restart: "unless-stopped"
+    ports:
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - .:/app
+    networks:
+      - coffee_app_network
+
+  nats:
+    container_name: coffee_nats
+    image: nats:2.10
+    entrypoint: /nats-server
+    command: "-c /config/server.conf"
+    ports:
+      - "127.0.0.1:4223:4222"
+      - "127.0.0.1:8223:8222"
+    volumes:
+      - ./nats/data:/data
+      - ./nats/config/server.conf:/config/server.conf
+    restart: "unless-stopped"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "5"
+    networks:
+      - coffee_app_network
+
+  postgres:
+    container_name: coffee_postgres
+    image: postgres:17-alpine
+    env_file: .env
+    restart: "unless-stopped"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "127.0.0.1:5433:5432"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "5"
+        compress: "true"
+    networks:
+      - coffee_app_network
+    volumes:
+      - "postgres-data:/var/lib/postgresql/data"
+
+  pgadmin:
+    container_name: coffee_pgadmin
+    image: dpage/pgadmin4:9
+    restart: "unless-stopped"
+    env_file: .env
+    ports:
+      - "127.0.0.1:8081:80"
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+    volumes:
+      - "pgadmin:/var/lib/pgadmin"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "5"
+    networks:
+      - coffee_app_network
+
+  taskiq_worker:
+    container_name: coffee_taskiq_worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["taskiq", "worker", "app.taskiq_broker.broker:broker", "-fsd", "--workers=1", "--max-fails=5"]
+    env_file: .env
+    restart: "unless-stopped"
+    volumes:
+      - .:/app
+    depends_on:
+      - nats
+    networks:
+      - coffee_app_network
+
+  taskiq_scheduler:
+    container_name: coffee_taskiq_scheduler
+    build: .
+    command: ["taskiq", "scheduler", "app.taskiq_broker.broker:scheduler", "-fsd"]
+    env_file: .env
+    volumes:
+      - .:/app
+    restart: "unless-stopped"
+    depends_on:
+      - taskiq_worker
+      - nats
+    networks:
+      - coffee_app_network
+
+  clickhouse:
+    container_name: clickhouse
+    image: clickhouse:25.7.4.11
+    ports: 
+      - "8123:8123" # HTTP Interface
+      - "9000:9000" # Web Interface
+    env_file: .env
+    environment:
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - CLICKHOUSE_LOG_LEVEL=${CLICKHOUSE_LOG_LEVEL}
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} -q 'SELECT 1'" ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - ./clickhouse/data:/var/lib/clickhouse
+      - ./clickhouse/config/http.xml:/etc/clickhouse-server/config.d/http.xml
+      - ./clickhouse/config/z_log_disable.xml:/etc/clickhouse-server/config.d/z_log_disable.xml
+      - ./clickhouse/config/z_log_queries.xml:/etc/clickhouse-server/users.d/z_log_queries.xml
+      - ./clickhouse/logs:/var/log
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - coffee_app_network
+
+
+networks:
+  coffee_app_network:
+    name: coffee_app_network
+
+volumes:
+  postgres-data:
+  pgadmin:
