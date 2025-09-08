@@ -1,10 +1,8 @@
 # ---- Stage 1: Builder ----
-FROM python:3.12-slim AS builder
+FROM python:3.11-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV PIP_NO_CACHE_DIR=1
-ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
@@ -12,15 +10,20 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+RUN curl -sSL https://install.python-poetry.org | python3 -
+ENV PATH="/root/.local/bin:$PATH"
+    
+COPY pyproject.toml poetry.lock ./
 
-# Устанавливаем зависимости в отдельный путь
-RUN pip install --prefix=/install -r requirements.txt
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-root
+
 
 # ---- Stage 2: Final image ----
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -28,7 +31,8 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # Копируем только установленные пакеты
-COPY --from=builder /install /usr/local
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Копируем исходники
 COPY . .
@@ -36,6 +40,4 @@ COPY . .
 # Минимизация мусора: удаляем ненужные кэши pip (по факту они уже не копируются)
 # RUN rm -rf /root/.cache
 
-EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["poetry", "run", "python", "main.py"]

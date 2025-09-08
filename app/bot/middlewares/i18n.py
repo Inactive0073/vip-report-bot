@@ -1,26 +1,42 @@
-import logging
-from typing import Any, Awaitable, Callable, Dict
+from collections.abc import Awaitable, Callable
+from typing import Any, Union
 
-from aiogram import BaseMiddleware
-from aiogram.types import TelegramObject, User
-from fluentogram import TranslatorHub
+from aiogram.dispatcher.middlewares.base import BaseMiddleware
+from aiogram.types import CallbackQuery, Message
+from fluent.runtime import FluentLocalization
 
-logger = logging.getLogger(__name__)
+from app.locales.i18n_format import I18N_FORMAT_KEY
 
 
-class TranslatorRunnerMiddleware(BaseMiddleware):
+class I18nMiddleware(BaseMiddleware):
+    def __init__(
+            self,
+            l10ns: dict[str, FluentLocalization],
+            default_lang: str,
+    ):
+        super().__init__()
+        self.l10ns = l10ns
+        self.default_lang = default_lang
+
     async def __call__(
-        self,
-        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
-        event: TelegramObject,
-        data: Dict[str, Any],
+            self,
+            handler: Callable[
+                [Union[Message, CallbackQuery], dict[str, Any]],
+                Awaitable[Any],
+            ],
+            event: Union[Message, CallbackQuery],
+            data: dict[str, Any],
     ) -> Any:
-        user: User = data.get("event_from_user")
+        # some language/locale retrieving logic
+        if event.from_user:
+            lang = event.from_user.language_code
+        else:
+            lang = self.default_lang
+        if lang not in self.l10ns:
+            lang = self.default_lang
 
-        if user is None:
-            return await handler(event, data)
-
-        hub: TranslatorHub = data.get("_translator_hub")
-        data["i18n"] = hub.get_translator_by_locale(locale=user.language_code)
+        l10n = self.l10ns[lang]
+        # we use fluent.runtime here, but you can create custom functions
+        data[I18N_FORMAT_KEY] = l10n.format_value
 
         return await handler(event, data)

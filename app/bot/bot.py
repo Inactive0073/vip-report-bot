@@ -5,7 +5,11 @@ from app.utils import (
 from app.config import Config, load_config
 from .setup import DependeciesConfig
 
+import logging
+
 async def main():
+    logger = logging.getLogger(__name__)
+    logger.info("Bot starting...")
     config: Config = load_config()
     dependecies_config = DependeciesConfig(config)
     dp = await dependecies_config.setup_dispatcher()

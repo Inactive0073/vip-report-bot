@@ -1,4 +1,5 @@
 import logging
+import os
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 from aiogram.filters import ExceptionTypeFilter
@@ -21,13 +22,16 @@ from aiogram.fsm.storage.base import DefaultKeyBuilder
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import RedisStorage
 
+from fluent.runtime import FluentLocalization, FluentResourceLoader
+
+
 from app.bot.handlers.errors import on_unknown_intent, on_unknown_state
 
 from ..db.base import Base
 from .middlewares import (
     DbSessionMiddleware,
     TrackAllUsersMiddleware,
-    TranslatorRunnerMiddleware,
+    I18nMiddleware,
     ContextMiddleware,
 )
 from ..dialogs.setup import get_dialogs
@@ -40,8 +44,10 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DependeciesConfig:
     config: Config
+    DEFAULT_LOCALE = "ru"
+    LOCALES = ["ru"]
 
-    async def setup_database(self) -> tuple[AsyncEngine, AsyncSession]:
+    async def setup_database(self) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
         engine = create_async_engine(
             url=self.config.db.dsn, echo=self.config.db.is_echo
         )
@@ -63,8 +69,9 @@ class DependeciesConfig:
         return bot
 
     async def setup_dispatcher(self) -> Dispatcher:
-        storage = RedisStorage().from_url(
-            url=self.config.redis_url,
+        storage = RedisStorage.from_url(
+            url=str(self.config.redis_url),
+            # если нужен параметр redis, добавьте его здесь
             key_builder=DefaultKeyBuilder(
                 separator="_", with_destiny=True, with_bot_id=True
             ),
@@ -73,10 +80,26 @@ class DependeciesConfig:
         self.dp = dp
         return dp
 
-    @staticmethod
+    @classmethod
+    def make_i18n_middleware(cls):
+        loader = FluentResourceLoader(os.path.join(
+            os.path.dirname(__file__),
+            "translations",
+            "{locale}",
+        ))
+        l10ns = {
+            locale: FluentLocalization(
+                [locale, cls.DEFAULT_LOCALE], ["main.ftl"], loader,
+            )
+            for locale in cls.LOCALES
+        }
+        return I18nMiddleware(l10ns, cls.DEFAULT_LOCALE)
+
+    @classmethod
     def register_middlewares_and_routers(
+        cls,
         dp: Dispatcher,
-        Sessionmaker: AsyncSession,
+        Sessionmaker: async_sessionmaker[AsyncSession],
         translator_hub,
         config: Config,
     ):
@@ -85,7 +108,7 @@ class DependeciesConfig:
         dp.include_routers(*get_dialogs())
 
         # Регистрируем миддлварь для i18n и бд
-        dp.update.middleware(TranslatorRunnerMiddleware())
+        dp.update.middleware(cls.make_i18n_middleware())
         dp.update.outer_middleware(DbSessionMiddleware(session_pool=Sessionmaker))
         dp.update.outer_middleware(
             ContextMiddleware(

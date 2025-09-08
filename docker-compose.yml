@@ -1,42 +1,22 @@
 services:
-  app:
-    container_name: coffee_app
-    build:
-      context: .
-      dockerfile: Dockerfile
-    depends_on:
-      - nats
-      - postgres
-    restart: "unless-stopped"
-    ports:
-      - "127.0.0.1:8001:8000"
-    volumes:
-      - .:/app
-    networks:
-      - coffee_app_network
+  # app:
+  #   container_name: vip_bot
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   depends_on:
+  #     - postgres
+  #   restart: "unless-stopped"
+  #   volumes:
+  #     - bot-data:/app
+  #   profiles:
+  #     - production
+  #   networks:
+  #     - vip_network_bot_reporter
 
-  nats:
-    container_name: coffee_nats
-    image: nats:2.10
-    entrypoint: /nats-server
-    command: "-c /config/server.conf"
-    ports:
-      - "127.0.0.1:4223:4222"
-      - "127.0.0.1:8223:8222"
-    volumes:
-      - ./nats/data:/data
-      - ./nats/config/server.conf:/config/server.conf
-    restart: "unless-stopped"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "30m"
-        max-file: "5"
-    networks:
-      - coffee_app_network
 
   postgres:
-    container_name: coffee_postgres
+    container_name: vip_bot_postgres
     image: postgres:17-alpine
     env_file: .env
     restart: "unless-stopped"
@@ -57,13 +37,15 @@ services:
         max-size: "30m"
         max-file: "5"
         compress: "true"
+    profiles:
+      - production
     networks:
-      - coffee_app_network
+      - vip_network_bot_reporter
     volumes:
       - "postgres-data:/var/lib/postgresql/data"
 
   pgadmin:
-    container_name: coffee_pgadmin
+    container_name: vip_bot_pgadmin
     image: dpage/pgadmin4:9
     restart: "unless-stopped"
     env_file: .env
@@ -82,73 +64,57 @@ services:
       options:
         max-size: "30m"
         max-file: "5"
+    profiles:
+      - production
     networks:
-      - coffee_app_network
+      - vip_network_bot_reporter
 
-  taskiq_worker:
-    container_name: coffee_taskiq_worker
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: ["taskiq", "worker", "app.taskiq_broker.broker:broker", "-fsd", "--workers=1", "--max-fails=5"]
-    env_file: .env
-    restart: "unless-stopped"
+  redis:
+    image: redis:8.2.0
+    container_name: vip_bot_redis
+    env_file: 
+      - .env
     volumes:
-      - .:/app
-    depends_on:
-      - nats
-    networks:
-      - coffee_app_network
-
-  taskiq_scheduler:
-    container_name: coffee_taskiq_scheduler
-    build: .
-    command: ["taskiq", "scheduler", "app.taskiq_broker.broker:scheduler", "-fsd"]
-    env_file: .env
-    volumes:
-      - .:/app
-    restart: "unless-stopped"
-    depends_on:
-      - taskiq_worker
-      - nats
-    networks:
-      - coffee_app_network
-
-  clickhouse:
-    container_name: clickhouse
-    image: clickhouse:25.7.4.11
-    ports: 
-      - "8123:8123" # HTTP Interface
-      - "9000:9000" # Web Interface
-    env_file: .env
-    environment:
-      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
-      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
-      - CLICKHOUSE_LOG_LEVEL=${CLICKHOUSE_LOG_LEVEL}
+      - redis-data:/data
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6378:6379"
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
     healthcheck:
-      test: ["CMD-SHELL", "clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} -q 'SELECT 1'" ]
-      interval: 5s
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "PING"]
+      interval: 10s
       timeout: 3s
-      retries: 20
-    volumes:
-      - ./clickhouse/data:/var/lib/clickhouse
-      - ./clickhouse/config/http.xml:/etc/clickhouse-server/config.d/http.xml
-      - ./clickhouse/config/z_log_disable.xml:/etc/clickhouse-server/config.d/z_log_disable.xml
-      - ./clickhouse/config/z_log_queries.xml:/etc/clickhouse-server/users.d/z_log_queries.xml
-      - ./clickhouse/logs:/var/log
+      retries: 3
+      start_period: 5s
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
-        max-file: "3"
+        max-file: "5"
+        compress: "true"
+    profiles:
+      - production
     networks:
-      - coffee_app_network
+      - vip_network_bot_reporter
 
+  db-migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - postgres
+    command: poetry run alembic upgrade head
+    profiles:
+      - migrations
+    networks:
+      - vip_network_bot_reporter
 
 networks:
-  coffee_app_network:
-    name: coffee_app_network
+  vip_network_bot_reporter:
+    name: vip_network_bot_reporter
 
 volumes:
   postgres-data:
   pgadmin:
+  bot-data:
+  redis-data:

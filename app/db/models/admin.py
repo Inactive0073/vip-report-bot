@@ -1,12 +1,9 @@
-from sqlalchemy import String, SmallInteger, text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from app.db.base import Base
+from app.db.models.base_model import BaseIDModel
 from .mixins import TimestampMixin, TelegramProfileMixin
 
 
-class Admin(TimestampMixin, TelegramProfileMixin, Base):
-    __tablename__ = "users"
+class Admin(TimestampMixin, TelegramProfileMixin, BaseIDModel):
+    __tablename__ = "admins"
 
     # created_at добавляется из миксина
 

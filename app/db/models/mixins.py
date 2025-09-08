@@ -14,7 +14,7 @@ class TimestampMixin:
 
 
 class TelegramProfileMixin:
-    telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, unique=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True)
     phone: Mapped[str] = mapped_column(String(18), unique=True, nullable=True)
     first_name: Mapped[str]
     username: Mapped[str | None]
