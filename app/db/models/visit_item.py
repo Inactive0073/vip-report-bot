@@ -1,5 +1,13 @@
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Integer, text, SmallInteger, BigInteger, ForeignKey, Index
+from sqlalchemy import (
+    String,
+    Integer,
+    text,
+    SmallInteger,
+    BigInteger,
+    ForeignKey,
+    Index,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -10,6 +18,7 @@ if TYPE_CHECKING:
     from .employee import Employee
     from .visit import Visit
     from .visit_item_file import VisitItemFile
+
 
 class VisitItem(TimestampMixin, BaseIDModel):
     __tablename__ = "visit_items"
@@ -22,6 +31,8 @@ class VisitItem(TimestampMixin, BaseIDModel):
     name: Mapped[str] = mapped_column(String(100))
     price: Mapped[int | None]
     quantity: Mapped[int | None]
-    
-    visit_item_file: Mapped[list["VisitItemFile"]] = relationship(back_populates="visit_item")
+
+    visit_item_file: Mapped[list["VisitItemFile"]] = relationship(
+        back_populates="visit_item"
+    )
     visit: Mapped["Visit"] = relationship(back_populates="visit_items")

@@ -6,9 +6,13 @@ from environs import Env
 class TgBot:
     token: str  # Токен для доступа к телеграм-боту
 
+
 @dataclass
 class RedisConfig:
-    url: str
+    host: str
+    port: int
+    db: str
+    password: str
 
 
 @dataclass
@@ -21,7 +25,7 @@ class DataBase:
 class Config:
     tg_bot: TgBot
     db: DataBase
-    redis_url: RedisConfig
+    redis_config: RedisConfig
 
 
 def load_config(path: str | None = None) -> Config:
@@ -30,5 +34,10 @@ def load_config(path: str | None = None) -> Config:
     return Config(
         tg_bot=TgBot(token=env("BOT_TOKEN")),
         db=DataBase(dsn=env("DSN"), is_echo=env.bool(("IS_ECHO"))),
-        redis_url=RedisConfig(url=env("REDIS_SOURCE"))
+        redis_config=RedisConfig(
+            host=env("REDIS_HOST"),
+            port=env("REDIS_PORT"),
+            db=env("REDIS_DB"),
+            password=env("REDIS_PASSWORD")
+            ),
     )

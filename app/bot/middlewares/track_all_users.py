@@ -9,7 +9,6 @@ from app.db.dao import UserDAO  # добавим импорт DAO
 
 
 logger = getLogger(__name__)
-    
 
 
 class TrackAllUsersMiddleware(BaseMiddleware):

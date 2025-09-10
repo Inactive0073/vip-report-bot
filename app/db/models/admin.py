@@ -12,6 +12,4 @@ class Admin(TimestampMixin, TelegramProfileMixin, BaseIDModel):
             name = self.first_name
         else:
             name = f"{self.first_name} {self.last_name}"
-        return (
-            f"[{self.telegram_id} | {self.username}] {name}"
-        )
+        return f"[{self.telegram_id} | {self.username}] {name}"

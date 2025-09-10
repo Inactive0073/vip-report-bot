@@ -19,4 +19,3 @@ class TelegramProfileMixin:
     first_name: Mapped[str]
     username: Mapped[str | None]
     last_name: Mapped[str | None]
-

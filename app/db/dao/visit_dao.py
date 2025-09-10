@@ -7,14 +7,13 @@ from typing import Sequence
 from .base import BaseDAO
 from app.db.models import Visit
 
+
 class VisitDAO(BaseDAO[Visit]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, Visit)
 
     async def get_by_period(
-        self, 
-        start_date: datetime, 
-        end_date: datetime
+        self, start_date: datetime, end_date: datetime
     ) -> Sequence[Visit]:
         result = await self.session.execute(
             select(Visit)

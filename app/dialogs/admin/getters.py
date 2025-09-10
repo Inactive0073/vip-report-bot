@@ -1,100 +1,89 @@
-from typing import TYPE_CHECKING, Dict
+from typing import Dict, List, Optional, Sequence, Union, cast
 from aiogram.types import User
 from aiogram_dialog import DialogManager
-from aiogram_dialog.widgets.kbd import Multiselect
-from fluentogram import TranslatorRunner
+from aiogram_dialog.widgets.kbd import Multiselect, Button
 
-from app.bot.db.admin_requests import get_employees
-from app.bot.utils.enums import UserType
+from sqlalchemy.ext.asyncio import AsyncSession 
 
-if TYPE_CHECKING:
-    from locales.stub import TranslatorRunner  # type:ignore
+from app.db.dao import StaffDAO, PointDAO
+from app.db.models import Employee, Admin
+from app.db.models.point import Point
+from app.locales.i18n_format import I18N_FORMAT_KEY
+from app.utils.schemas.enums_types import UserRole
+from .services import format_stores
 
 
-async def get_common_data(
-    dialog_manager: DialogManager,
-    i18n: TranslatorRunner,
-    **kwargs,
-) -> Dict[str, str]:
+async def get_roles_data( **kwargs) -> Dict[str, Sequence[UserRole]]:
+    roles = list(UserRole)
     return {
-        "back": i18n.back(),
-        "hello_admin": i18n.admin.hello.message(),
-        "next": i18n.next(),
-        "yes": i18n.yes(),
-        "no": i18n.no(),
-        "a_u_sure?": i18n.a.u.sure(),
-        "reports_btn": i18n.admin.reports.btn(),
-        "customer_role_btn": i18n.admin.role.customer.btn(),
-        "waiter_role_btn": i18n.admin.role.waiter.btn(),
-        "manager_role_btn": i18n.admin.role.manager.btn(),
-        "ban_menu_btn": i18n.admin.ban.menu.btn(),
-        "team_menu_btn": i18n.admin.team.btn(),
+        "roles": roles
     }
-
-
-async def get_reports_data(
-    dialog_manager: DialogManager, i18n: TranslatorRunner, **kwargs
-) -> Dict[str, str]:
-    return {
-        "reports_msg": i18n.admin.reports.menu.msg(),
-        "reports_users": i18n.admin.reports.all_.users.btn(),
-        "reports_scheduled_posts": i18n.admin.reports.all_.scheduled_posts.btn(),
-        "reports_bonus_records": i18n.admin.reports.bonus.accrual.records.btn(),
-    }
-
-
-async def get_team_data(
-    dialog_manager: DialogManager, i18n: TranslatorRunner, **kwargs
-) -> Dict[str, str]:
-    return {
-        "team_msg": i18n.admin.team.menu.msg(),
-        "team_add_btn": i18n.admin.team.invite.btn(),
-        "team_invite_msg": i18n.admin.team.invite.msg(),
-        "team_kick_btn": i18n.admin.team.kick.btn(),
-    }
-
-
-async def get_roles_data(
-    dialog_manager: DialogManager, i18n: TranslatorRunner, **kwargs
-) -> Dict[str, str]:
-    roles = UserType.get_roles(with_id=True)
-    return {"team_select_msg": i18n.admin.team.select.role.msg(), "roles": roles}
 
 
 async def get_kicking_data(
     dialog_manager: DialogManager,
-    i18n: TranslatorRunner,
     event_from_user: User,
     **kwargs,
-) -> Dict[str, str]:
-    session = dialog_manager.middleware_data.get("session")
-    ms: Multiselect = dialog_manager.find("ms_employees")
-    selected_employees = ms.get_checked()
+) -> Dict[str, Union[List[str], List[Admin | Employee]]]:
+    session = dialog_manager.middleware_data["session"]
+    ms: Optional[Multiselect] = dialog_manager.find("ms_employees")
+    if not ms:
+        return {"selected_employees": [], "employees": []}
+    selected_employees = ms.get_checked() # type: ignore
     employees = []
-    for user in await get_employees(session=session):
+    dao = StaffDAO(session=session)
+    for user in await dao.get_all_staff():
         user.username = "нет никнейма" if user.username is None else user.username
         if user.username != event_from_user.username:
             employees.append(user)
 
-    return {
+    return  {
         "selected_employees": selected_employees,
-        "team_kick_msg": i18n.admin.team.kick.msg(),
         "employees": employees,
     }
 
 
-async def get_approve_data(
-    dialog_manager: DialogManager, i18n: TranslatorRunner, **kwargs
-) -> Dict[str, str]:
-    return {"approve_kick_msg": i18n.admin.team.approve.kick.msg()}
-
-
-async def get_ban_data(
-    dialog_manager: DialogManager, i18n: TranslatorRunner, **kwargs
-) -> Dict[str, str]:
+async def stores_getter(
+       dialog_manager: DialogManager,
+       **kwargs
+) -> Dict[str, list[tuple[str, str]]]:
+    session = dialog_manager.middleware_data["session"]
+    dao = PointDAO(session=session)
+    stores = format_stores(cast(Sequence[Point], await dao.get_all()))
+    dialog_manager.dialog_data["local_stores"] = stores
     return {
-        "ban_msg": i18n.admin.ban.menu.msg(),
-        "ban_btn": i18n.admin.ban.menu.btn(),
-        "unban_btn": i18n.admin.ban.menu.msg(),
-        "not_found": i18n.admin.ban.not_.found.msg(),
+        "stores": stores,
+    }
+
+async def get_store_approve_data(
+    dialog_manager: DialogManager,
+    **kwargs
+) -> Dict[str, str]:
+    store_name = dialog_manager.dialog_data["store_name"]
+    store_address = dialog_manager.dialog_data["store_address"]
+    _ = dialog_manager.middleware_data[I18N_FORMAT_KEY]
+    store_info = _("admin-store-check-data-store-msg", ({"store_name": store_name, "store_address": store_address}))
+    
+    return {
+        "admin-store-check-data-store-msg": store_info,
+    }
+
+async def get_selected_store_info(
+    dialog_manager: DialogManager,
+    **kwargs
+) -> Dict[str, str]:
+    _ = dialog_manager.middleware_data[I18N_FORMAT_KEY]
+    session = cast(AsyncSession, dialog_manager.middleware_data["session"])
+    selected_store_id = int(dialog_manager.dialog_data["selected_store_id"])
+    point_dao = PointDAO(session)
+
+    selected_store = await point_dao.get_by_id(selected_store_id)
+    if selected_store:
+        selected_store_fmt = f"Имя: {selected_store.name}\nАдрес: {selected_store.address}"
+    else:
+        selected_store_fmt = "No data"
+    visits = await point_dao.get_visits(selected_store_id)
+
+    return {
+        "admin-store-full-info-msg": _("admin-store-full-info-msg", ({"store_info": selected_store_fmt}))
     }

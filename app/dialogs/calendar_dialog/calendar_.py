@@ -20,12 +20,15 @@ SELECTED_DAYS_KEY = "days_with_posts"
 class WeekDay(Text):
     async def _render_text(self, data, manager: DialogManager) -> str:
         selected_date: date = data["date"]
-        locale = manager.event.from_user.language_code
-        return get_day_names(
-            width="short",
-            context="stand-alone",
-            locale=locale,
-        )[selected_date.weekday()].title()
+        if tg_user := manager.event.from_user:
+            locale = tg_user.language_code
+            return get_day_names(
+                width="short",
+                context="stand-alone",
+                locale=locale,
+            )[selected_date.weekday()].title()
+        else:
+            return ""
 
 
 class MarkedDay(Text):
@@ -46,12 +49,15 @@ class MarkedDay(Text):
 class Month(Text):
     async def _render_text(self, data, manager: DialogManager) -> str:
         selected_date: date = data["date"]
-        locale = manager.event.from_user.language_code
-        return get_month_names(
-            "wide",
-            context="stand-alone",
-            locale=locale,
-        )[selected_date.month].title()
+        if tg_user := manager.event.from_user:
+            locale = tg_user.language_code
+            return get_month_names(
+                "wide",
+                context="stand-alone",
+                locale=locale,
+            )[selected_date.month].title()
+        else:
+            return ""
 
 
 class CustomCalendar(Calendar):

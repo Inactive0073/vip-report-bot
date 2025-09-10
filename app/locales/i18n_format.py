@@ -23,6 +23,7 @@ class I18NFormat(Text):
 
     async def _render_text(self, data: dict, manager: DialogManager) -> str:
         format_text = manager.middleware_data.get(
-            I18N_FORMAT_KEY, default_format_text,
+            I18N_FORMAT_KEY,
+            default_format_text,
         )
         return format_text(self.text, data)

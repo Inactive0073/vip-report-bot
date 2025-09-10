@@ -1,5 +1,3 @@
 from .employee import EmployeeSG
 
-__all__ = [
-    "EmployeeSG"
-]
+__all__ = ["EmployeeSG"]

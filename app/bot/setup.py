@@ -20,6 +20,7 @@ from dataclasses import dataclass
 
 from aiogram.fsm.storage.base import DefaultKeyBuilder
 from aiogram.enums import ParseMode
+from redis.asyncio import Redis
 from aiogram.fsm.storage.redis import RedisStorage
 
 from fluent.runtime import FluentLocalization, FluentResourceLoader
@@ -32,7 +33,6 @@ from .middlewares import (
     DbSessionMiddleware,
     TrackAllUsersMiddleware,
     I18nMiddleware,
-    ContextMiddleware,
 )
 from ..dialogs.setup import get_dialogs
 from .handlers.commands import commands_router
@@ -47,7 +47,9 @@ class DependeciesConfig:
     DEFAULT_LOCALE = "ru"
     LOCALES = ["ru"]
 
-    async def setup_database(self) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
+    async def setup_database(
+        self,
+    ) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
         engine = create_async_engine(
             url=self.config.db.dsn, echo=self.config.db.is_echo
         )
@@ -69,53 +71,59 @@ class DependeciesConfig:
         return bot
 
     async def setup_dispatcher(self) -> Dispatcher:
-        storage = RedisStorage.from_url(
-            url=str(self.config.redis_url),
-            # если нужен параметр redis, добавьте его здесь
-            key_builder=DefaultKeyBuilder(
-                separator="_", with_destiny=True, with_bot_id=True
-            ),
+        redis = Redis(
+            host=self.config.redis_config.host,
+            port=self.config.redis_config.port,
+            db=self.config.redis_config.db,
+            password=self.config.redis_config.password,
         )
+        storage = RedisStorage(
+            redis,
+            key_builder=DefaultKeyBuilder(
+                    separator="_", with_destiny=True, with_bot_id=True
+            ))
+            # если нужен параметр redis, добавьте его здесь
         dp = Dispatcher(storage=storage)
         self.dp = dp
         return dp
 
-    @classmethod
-    def make_i18n_middleware(cls):
-        loader = FluentResourceLoader(os.path.join(
-            os.path.dirname(__file__),
-            "translations",
-            "{locale}",
-        ))
+    def make_i18n_middleware(self) -> I18nMiddleware:
+        # Получаем абсолютный путь к папке locales/ru
+        locales_dir = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),  # подняться на уровень выше (app/)
+            "locales"
+        )
+        loader = FluentResourceLoader(
+            os.path.join(locales_dir, "{locale}")
+        )
         l10ns = {
             locale: FluentLocalization(
-                [locale, cls.DEFAULT_LOCALE], ["main.ftl"], loader,
+                [locale, self.DEFAULT_LOCALE],
+                ["txt.ftl"],  # имя файла локализации
+                loader,
             )
-            for locale in cls.LOCALES
+            for locale in self.LOCALES
         }
-        return I18nMiddleware(l10ns, cls.DEFAULT_LOCALE)
+        return I18nMiddleware(l10ns, self.DEFAULT_LOCALE)
 
-    @classmethod
+    
     def register_middlewares_and_routers(
-        cls,
+        self,
         dp: Dispatcher,
         Sessionmaker: async_sessionmaker[AsyncSession],
-        translator_hub,
         config: Config,
     ):
+        # Регистрируем миддлварь для i18n и бд
+        i18n_middleware = self.make_i18n_middleware()
+        dp.message.middleware(i18n_middleware)
+        dp.update.middleware(i18n_middleware)
+        dp.callback_query.middleware(i18n_middleware)
+        dp.update.outer_middleware(DbSessionMiddleware(session_pool=Sessionmaker))
+        dp.message.outer_middleware(TrackAllUsersMiddleware())
+
         # Регистриуем роутеры в диспетчере
         dp.include_router(commands_router)
         dp.include_routers(*get_dialogs())
-
-        # Регистрируем миддлварь для i18n и бд
-        dp.update.middleware(cls.make_i18n_middleware())
-        dp.update.outer_middleware(DbSessionMiddleware(session_pool=Sessionmaker))
-        dp.update.outer_middleware(
-            ContextMiddleware(
-                _translator_hub=translator_hub,
-            )
-        )
-        dp.message.outer_middleware(TrackAllUsersMiddleware())
 
         # Запускаем функцию настройки проекта для работы с диалогами
         bg_factory = setup_dialogs(dp)
@@ -123,8 +131,8 @@ class DependeciesConfig:
 
         # Регистрация хендлеров на ошибки
         dp.errors.register(
-        on_unknown_intent,
-        ExceptionTypeFilter(UnknownIntent),
+            on_unknown_intent,
+            ExceptionTypeFilter(UnknownIntent),
         )
         dp.errors.register(
             on_unknown_state,
@@ -135,4 +143,3 @@ class DependeciesConfig:
     async def set_commands(bot: Bot):
         commands = [BotCommand(command="/start", description="Запуск / Start")]
         await bot.set_my_commands(commands=commands)
-

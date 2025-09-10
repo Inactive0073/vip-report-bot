@@ -9,9 +9,8 @@ if TYPE_CHECKING:
     from .visit import Visit
     from .user import User
 
+
 class Employee(TimestampMixin, TelegramProfileMixin, BaseIDModel):
     __tablename__ = "employees"
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    visits: Mapped[list["Visit"]] = relationship(back_populates="employee")
-    user: Mapped["User"] = relationship()
+    visits: Mapped[list["Visit"]] = relationship(back_populates="employee", lazy="selectin")

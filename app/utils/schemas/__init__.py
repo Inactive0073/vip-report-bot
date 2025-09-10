@@ -1,5 +1,5 @@
-from .models import PostData
+from .enums_types import UserRole
 
 __all__ = [
-    "PostData",
+    "UserRole",
 ]

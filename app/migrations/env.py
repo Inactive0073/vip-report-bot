@@ -27,10 +27,7 @@ target_metadata = Base.metadata
 
 db_config: DataBase = load_config().db
 print(f"DSN IS {db_config.dsn}")
-config.set_main_option(
-    "sqlalchemy.url",
-    db_config.dsn
-)
+config.set_main_option("sqlalchemy.url", db_config.dsn)
 
 
 # other values from the config, defined by the needs of env.py,

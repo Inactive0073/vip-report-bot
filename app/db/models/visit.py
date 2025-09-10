@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from .point import Point
     from .visit_item import VisitItem
 
+
 class Visit(TimestampMixin, BaseIDModel):
     __tablename__ = "visits"
 
@@ -21,7 +22,7 @@ class Visit(TimestampMixin, BaseIDModel):
     description: Mapped[str] = mapped_column(String(500))
     employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"))
     point_id: Mapped[int] = mapped_column(ForeignKey("points.id"))
-    
+
     employee: Mapped["Employee"] = relationship(back_populates="visits")
     point: Mapped["Point"] = relationship(back_populates="visits")
     visit_items: Mapped[list["VisitItem"]] = relationship(back_populates="visit")

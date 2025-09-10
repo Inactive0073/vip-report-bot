@@ -11,15 +11,13 @@ if TYPE_CHECKING:
 
 class Point(TimestampMixin, BaseIDModel):
     __tablename__ = "points"
-    __table_args__ = (
-        Index("idx_point_status", "status"),
-    )
+    __table_args__ = (Index("idx_point_status", "status"),)
 
     name: Mapped[str]
     status: Mapped[str | None]
     address: Mapped[str]
 
+    visits: Mapped[list["Visit"]] = relationship(back_populates="point", lazy="selectin")
 
-    visits: Mapped[list["Visit"]] = relationship(back_populates="point")
     def __repr__(self) -> str:
         return f"Точка {self.name}\nАдрес: {self.address}\nСтатус: {self.status}"
